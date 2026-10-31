@@ -10,6 +10,8 @@
 #include "MediaManager.h"
 #include "ModeController.h"
 #include "RouteManager.h"
+#include "AlertManager.h"
+#include "ImuManager.h"
 #include "SettingsStore.h"
 #if defined(MOTOMAP_NAV_MAP)
 #include "NavigationMapManager.h"
@@ -42,14 +44,18 @@ ConnectionManager::ConnectionManager(DisplayManager* display,
                                      GpsManager* gps,
                                      RouteManager* route,
                                      SettingsStore* settings,
-                                     NavigationMapManager* mapManager)
+                                     NavigationMapManager* mapManager,
+                                     AlertManager* alertManager,
+                                     ImuManager* imu)
     : _display(display),
       _media(media),
       _modeController(modeController),
       _gps(gps),
       _route(route),
       _settings(settings),
-      _mapManager(mapManager) {}
+      _mapManager(mapManager),
+      _alertManager(alertManager),
+      _imu(imu) {}
 
 void ConnectionManager::begin() {
     if (!LittleFS.begin(true)) {
@@ -239,6 +245,11 @@ void ConnectionManager::configureRoutes() {
     _server.on("/api/navigation/stop", HTTP_POST, [this]() { handleNavigationStop(); });
     _server.on("/navigation/stop", HTTP_POST, [this]() { handleNavigationStop(); });
     _server.on("/api/navigation/reroute", HTTP_POST, [this]() { handleNavigationReroute(); });
+    _server.on("/api/alert-config", HTTP_GET, [this]() { handleAlertConfigGet(); });
+    _server.on("/api/alert-config", HTTP_POST, [this]() { handleAlertConfigPost(); });
+    _server.on("/api/alert-test", HTTP_POST, [this]() { handleAlertTest(); });
+    _server.on("/api/imu", HTTP_GET, [this]() { handleImuApi(); });
+    _server.on("/api/imu/clear-alert", HTTP_POST, [this]() { handleImuClearAlert(); });
 
     _server.on("/mode/media", HTTP_POST, [this]() {
         if (navigationActive()) {
@@ -719,3 +730,127 @@ void ConnectionManager::handleMapTileUpload() {
     }
 }
 
+
+
+void ConnectionManager::handleAlertConfigGet() {
+    JsonDocument doc;
+    if (_settings != nullptr) {
+        AlertConfig config;
+        _settings->loadAlertConfig(config);
+        doc["enabled"] = config.enabled;
+        doc["gateway_url"] = config.gatewayUrl;
+        doc["chat_ids"] = config.chatIds;
+        if (config.authKey.length() > 4) {
+            String masked = "";
+            for (size_t i = 0; i < config.authKey.length() - 4; ++i) masked += '*';
+            masked += config.authKey.substring(config.authKey.length() - 4);
+            doc["auth_key"] = masked;
+        } else if (!config.authKey.isEmpty()) {
+            doc["auth_key"] = "****";
+        } else {
+            doc["auth_key"] = "";
+        }
+    }
+    if (_alertManager != nullptr) {
+        doc["busy"] = _alertManager->isBusy();
+        doc["last_status"] = _alertManager->lastStatus();
+    }
+    String body;
+    serializeJson(doc, body);
+    sendJson(body);
+}
+
+void ConnectionManager::handleAlertConfigPost() {
+    JsonDocument doc;
+    String error;
+    if (!parseBody(_server, doc, error)) {
+        sendError(error, 400);
+        return;
+    }
+    if (_settings == nullptr) {
+        sendError("settings_store_null", 500);
+        return;
+    }
+
+    AlertConfig config;
+    _settings->loadAlertConfig(config);
+
+    if (!doc["enabled"].isNull()) {
+        config.enabled = doc["enabled"] | true;
+    }
+    if (!doc["gateway_url"].isNull()) {
+        config.gatewayUrl = String(doc["gateway_url"] | "");
+    }
+    if (!doc["chat_ids"].isNull()) {
+        config.chatIds = String(doc["chat_ids"] | "");
+    }
+    if (!doc["auth_key"].isNull()) {
+        String key = String(doc["auth_key"] | "");
+        if (!key.startsWith("****") && !key.isEmpty()) {
+            config.authKey = key;
+        }
+    }
+
+    if (_settings->saveAlertConfig(config)) {
+        sendJson("{\"ok\":true,\"saved\":true}");
+    } else {
+        sendError("failed_to_save_alert_config", 500);
+    }
+}
+
+void ConnectionManager::handleAlertTest() {
+    if (_alertManager == nullptr) {
+        sendError("alert_manager_null", 500);
+        return;
+    }
+    GpsSnapshot gps;
+    if (_gps != nullptr) {
+        gps = _gps->snapshot();
+    }
+    const bool queued = _alertManager->triggerTestAlert(gps);
+    if (queued) {
+        sendJson("{\"ok\":true,\"queued\":true}");
+    } else {
+        sendError("failed_to_queue_alert", 400);
+    }
+}
+
+
+void ConnectionManager::handleImuApi() {
+    if (_imu == nullptr) {
+        sendError("imu_manager_null", 503);
+        return;
+    }
+    ImuData data{};
+    const bool ok = _imu->getData(data);
+    if (!ok) {
+        sendError("imu_data_unavailable", 503);
+        return;
+    }
+
+    JsonDocument doc;
+    doc["valid"] = data.valid;
+    doc["connected"] = _imu->isSensorConnected();
+    doc["ax"] = data.ax;
+    doc["ay"] = data.ay;
+    doc["az"] = data.az;
+    doc["gx"] = data.gx;
+    doc["gy"] = data.gy;
+    doc["gz"] = data.gz;
+    doc["temperature"] = data.temperature;
+    doc["roll"] = data.roll;
+    doc["pitch"] = data.pitch;
+    doc["fall_detected"] = data.fallDetected;
+    doc["fall_duration_ms"] = data.fallDurationMs;
+
+    String body;
+    serializeJson(doc, body);
+    sendJson(body);
+}
+
+void ConnectionManager::handleImuClearAlert() {
+    if (_imu != nullptr) {
+        _imu->clearFallAlert();
+    }
+    sendJson("{\"ok\":true,\"cleared\":true}");
+}

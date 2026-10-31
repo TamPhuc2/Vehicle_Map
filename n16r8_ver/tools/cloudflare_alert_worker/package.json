@@ -1,0 +1,14 @@
+{
+  "name": "motomap-zalo-gateway",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker Gateway for MotoMap ESP32 to Zalo Bot emergency alerts",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "wrangler": "^3.80.0"
+  }
+}

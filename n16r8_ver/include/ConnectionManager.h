@@ -10,8 +10,9 @@ class MediaManager;
 class ModeController;
 class RouteManager;
 class SettingsStore;
-
 class NavigationMapManager;
+class AlertManager;
+class ImuManager;
 
 class ConnectionManager {
 public:
@@ -21,7 +22,9 @@ public:
                       GpsManager* gps,
                       RouteManager* route,
                       SettingsStore* settings,
-                      NavigationMapManager* mapManager = nullptr);
+                      NavigationMapManager* mapManager = nullptr,
+                      AlertManager* alertManager = nullptr,
+                      ImuManager* imu = nullptr);
 
     void begin();
     void loop();
@@ -43,6 +46,8 @@ private:
     RouteManager* _route;
     SettingsStore* _settings;
     NavigationMapManager* _mapManager;
+    AlertManager* _alertManager;
+    ImuManager* _imu;
     File _tileUploadFile;
     NetworkState _networkState = NetworkState::Connecting;
     String _stationSsid;
@@ -83,6 +88,11 @@ private:
     void handleMapOfflineStats();
     void handleMapOfflineDelete();
     void handleMapTileUpload();
+    void handleAlertConfigGet();
+    void handleAlertConfigPost();
+    void handleAlertTest();
+    void handleImuApi();
+    void handleImuClearAlert();
 
     void sendJson(const String& body, int status = 200);
     void sendError(const String& error, int status);

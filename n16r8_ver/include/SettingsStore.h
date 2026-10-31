@@ -15,4 +15,7 @@ public:
     DestinationData loadDestination() const;
     bool saveDestination(const DestinationData& destination);
     bool setDestinationActive(bool active);
+
+    bool loadAlertConfig(AlertConfig& config) const;
+    bool saveAlertConfig(const AlertConfig& config);
 };

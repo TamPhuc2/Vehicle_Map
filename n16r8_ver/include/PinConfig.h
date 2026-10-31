@@ -4,9 +4,9 @@
 
 // ==============================================================================
 // ESP32-S3 DevKit Pinout Configuration for MotoMap
-// Lưu ý quan trọng cho ESP32-S3 N16R8 (Octal Flash / Octal PSRAM):
-// Tuyệt đối KHÔNG sử dụng các chân GPIO 26 -> 37 (Dành riêng cho Flash/PSRAM).
-// Các chân dưới đây có thể thay đổi bằng -DPIN_... trong platformio.ini nếu cần.
+// Important Note for ESP32-S3 N16R8 (Octal Flash / Octal PSRAM):
+// Strictly DO NOT use GPIO 26 -> 37 (Dedicated to Flash/PSRAM).
+// All pins below can be overridden via -DPIN_... build flags in platformio.ini.
 // ==============================================================================
 
 namespace PinConfig {
@@ -36,7 +36,7 @@ namespace PinConfig {
 #endif
 
 #ifndef PIN_ST7789_BL
-#define PIN_ST7789_BL -1   // Đèn nền đấu sẵn VCC (không dùng)
+#define PIN_ST7789_BL -1   // Backlight tied to VCC (unused)
 #endif
 
 #ifndef PIN_GPS_RX
@@ -48,7 +48,20 @@ namespace PinConfig {
 #endif
 
 #ifndef PIN_BUTTON
-#define PIN_BUTTON 0   // BOOT button trên board ESP32-S3 (nhấn xuống LOW)
+#define PIN_BUTTON 0   // BOOT button on ESP32-S3 board (active LOW)
+#endif
+
+// ==============================================================================
+// I2C Pinout Configuration (IMU MPU-6050 Fall Detection Sensor)
+// Note: Avoid GPIO 9 as it is assigned to PIN_ST7789_CS (SPI Display).
+// Default to GPIO 7 for SCL and GPIO 8 for SDA on ESP32-S3 DevKitC-1.
+// ==============================================================================
+#ifndef PIN_I2C_SDA
+#define PIN_I2C_SDA 8
+#endif
+
+#ifndef PIN_I2C_SCL
+#define PIN_I2C_SCL 7
 #endif
 
 constexpr int kPinSclk = PIN_ST7789_SCLK;
@@ -63,5 +76,8 @@ constexpr int kGpsRxPin = PIN_GPS_RX;
 constexpr int kGpsTxPin = PIN_GPS_TX;
 
 constexpr int kButtonPin = PIN_BUTTON;
+
+constexpr int kI2cSdaPin = PIN_I2C_SDA;
+constexpr int kI2cSclPin = PIN_I2C_SCL;
 
 } // namespace PinConfig

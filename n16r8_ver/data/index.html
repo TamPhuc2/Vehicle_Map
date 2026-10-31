@@ -164,6 +164,81 @@
       <p id="media-message" class="message" role="status"></p>
     </section>
 
+        <section class="card">
+      <div class="card-heading">
+        <h2>Cảnh báo SOS & Zalo</h2>
+        <span id="alert-status-pill" class="status-pill">Sẵn sàng</span>
+      </div>
+      <p class="muted">Gửi tin nhắn định vị cứu hộ tự động tới Zalo của người thân khi xảy ra biến cố hoặc té ngã.</p>
+      <form id="alert-form" class="stack-form">
+        <label for="alert-enabled" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input id="alert-enabled" type="checkbox" checked>
+          <span>Kích hoạt tính năng cảnh báo Zalo</span>
+        </label>
+
+        <label for="alert-chat-ids">Zalo Chat ID người nhận (phân cách bằng dấu phẩy nếu nhiều người)</label>
+        <input id="alert-chat-ids" type="text" autocomplete="off" placeholder="Ví dụ: 123456789, 987654321">
+
+        <label for="alert-gateway-url">Cloudflare Gateway URL</label>
+        <input id="alert-gateway-url" type="url" autocomplete="off" placeholder="https://motomap-zalo-gateway.<subdomain>.workers.dev">
+
+        <label for="alert-auth-key">Gateway Auth Key (Bearer Token)</label>
+        <input id="alert-auth-key" type="password" autocomplete="off" placeholder="Khóa bảo mật giữa ESP32 và Cloudflare">
+
+        <div class="button-row">
+          <button id="save-alert-config" class="button button-primary" type="submit">Lưu cấu hình</button>
+          <button id="test-alert-btn" class="button button-secondary" type="button">Gửi thử nghiệm</button>
+        </div>
+        <p id="alert-message" class="message" role="status"></p>
+      </form>
+    </section>
+
+    <section class="card">
+      <div class="card-heading">
+        <h2>Cảm biến góc nghiêng & Té ngã (IMU)</h2>
+        <span id="imu-status-pill" class="status-pill">Đang kết nối</span>
+      </div>
+      <div id="fall-alert-banner" class="fall-alert hidden" role="alert">
+        <div style="font-weight:700; margin-bottom:6px;">⚠️ CẢNH BÁO: Phát hiện xe có thể đã bị ngã! <span id="fall-reason"></span></div>
+        <button id="clear-fall-alert-btn" class="button button-small button-danger" type="button">Xóa cảnh báo</button>
+      </div>
+      <p class="muted">Theo dõi độ nghiêng xe máy thời gian thực. Hệ thống tự động kích hoạt cảnh báo Zalo nếu xe nghiêng quá 45° trong 5 giây.</p>
+      <div class="tilt-grid">
+        <div class="tilt-card">
+          <div class="tilt-title">Nghiêng trái / phải (Roll)</div>
+          <div class="tilt-value"><span id="imu-roll">--</span>°</div>
+          <svg class="tilt-svg" viewBox="0 0 320 180" role="img" aria-label="Mô phỏng xe máy nhìn từ phía trước">
+            <line x1="30" y1="145" x2="290" y2="145" stroke="#64748b" stroke-width="3"/>
+            <g id="rollBike" transform="rotate(0 160 95)" fill="none" stroke="#36d399" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+              <ellipse cx="160" cy="127" rx="25" ry="38"/>
+              <path d="M160 91V53M119 52h82M137 52l23 18 23-18"/>
+              <path d="M143 88h34l-8 20h-18z" fill="#36d399" stroke="none"/>
+            </g>
+          </svg>
+        </div>
+        <div class="tilt-card">
+          <div class="tilt-title">Dốc lên / xuống (Pitch)</div>
+          <div class="tilt-value"><span id="imu-pitch">--</span>°</div>
+          <svg class="tilt-svg" viewBox="0 0 320 180" role="img" aria-label="Mô phỏng xe máy trên đường dốc">
+            <g id="pitchScene" transform="rotate(0 160 115)">
+              <line x1="20" y1="145" x2="300" y2="145" stroke="#64748b" stroke-width="4"/>
+              <g fill="none" stroke="#36d399" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="92" cy="116" r="25"/>
+                <circle cx="226" cy="116" r="25"/>
+                <path d="M92 116l42-46 38 46H92l25-36h39l27 36M134 70h-20l-12-17M172 116l19-52 17-8M185 55h28"/>
+                <path d="M127 70l12-16 31 5-12 15z" fill="#36d399"/>
+              </g>
+            </g>
+          </svg>
+        </div>
+      </div>
+      <div class="imu-telemetry">
+        <div>Gia tốc: <span id="imu-accel">--</span> m/s²</div>
+        <div>Vận tốc góc: <span id="imu-gyro">--</span> rad/s</div>
+        <div>Nhiệt độ IMU: <span id="imu-temp">--</span> °C</div>
+      </div>
+    </section>
+
     <footer class="app-footer">
       <p>© OpenStreetMap contributors · tìm kiếm Nominatim · routing OSRM.</p>
       <p>Sau khi xác nhận điểm đến, có thể đóng Safari và khóa màn hình iPhone.</p>

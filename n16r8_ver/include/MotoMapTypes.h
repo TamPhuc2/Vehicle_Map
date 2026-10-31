@@ -56,6 +56,23 @@ struct DestinationData {
     String vehicle = "motorcycle";
 };
 
+struct AlertConfig {
+    bool enabled = true;
+    String gatewayUrl;
+    String authKey;
+    String chatIds;
+};
+
+struct AlertEvent {
+    char event[64] = "Collision / Fall Detected";
+    double latitude = 0.0;
+    double longitude = 0.0;
+    float speedKmh = 0.0F;
+    float courseDeg = 0.0F;
+    char status[32] = "Auto-Triggered";
+    char timestamp[32] = "";
+};
+
 struct NavigationData {
     NavigationState state = NavigationState::Stop;
     Maneuver maneuver = Maneuver::Straight;

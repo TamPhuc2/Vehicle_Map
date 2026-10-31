@@ -36,7 +36,16 @@
     saveAnimation: $("save-animation"), deleteAnimation: $("delete-animation"),
     animationProgress: $("animation-progress"), animationStatus: $("animation-status"), mediaMessage: $("media-message"),
     downloadRouteMap: $("download-route-map"), deleteOfflineMap: $("delete-offline-map"),
-    offlineMapProgress: $("offline-map-progress"), offlineMapMessage: $("offline-map-message"), offlineMapStats: $("offline-map-stats")
+    offlineMapProgress: $("offline-map-progress"), offlineMapMessage: $("offline-map-message"), offlineMapStats: $("offline-map-stats"),
+    alertForm: $("alert-form"), alertEnabled: $("alert-enabled"), alertChatIds: $("alert-chat-ids"),
+    alertGatewayUrl: $("alert-gateway-url"), alertAuthKey: $("alert-auth-key"),
+    saveAlertConfig: $("save-alert-config"), testAlertBtn: $("test-alert-btn"),
+    alertMessage: $("alert-message"), alertStatusPill: $("alert-status-pill"),
+    imuStatusPill: $("imu-status-pill"), fallAlertBanner: $("fall-alert-banner"),
+    fallReason: $("fall-reason"), clearFallAlertBtn: $("clear-fall-alert-btn"),
+    imuRoll: $("imu-roll"), imuPitch: $("imu-pitch"),
+    rollBike: $("rollBike"), pitchScene: $("pitchScene"),
+    imuAccel: $("imu-accel"), imuGyro: $("imu-gyro"), imuTemp: $("imu-temp")
   };
 
   const state = {
@@ -1108,11 +1117,121 @@
     }
   });
 
+    async function loadAlertConfig() {
+    try {
+      const data = await api("/api/alert-config");
+      if (els.alertEnabled) els.alertEnabled.checked = data.enabled !== false;
+      if (els.alertChatIds) els.alertChatIds.value = data.chat_ids || "";
+      if (els.alertGatewayUrl) els.alertGatewayUrl.value = data.gateway_url || "";
+      if (els.alertAuthKey && data.auth_key) els.alertAuthKey.value = data.auth_key;
+      if (els.alertStatusPill && data.last_status) {
+        els.alertStatusPill.textContent = data.busy ? "Đang gửi..." : data.last_status;
+      }
+    } catch (_) {}
+  }
+
+  async function handleAlertConfigSave(e) {
+    if (e) e.preventDefault();
+    if (els.alertMessage) setMessage(els.alertMessage, "Đang lưu cấu hình...");
+    try {
+      const payload = {
+        enabled: els.alertEnabled ? els.alertEnabled.checked : true,
+        chat_ids: els.alertChatIds ? els.alertChatIds.value.trim() : "",
+        gateway_url: els.alertGatewayUrl ? els.alertGatewayUrl.value.trim() : "",
+        auth_key: els.alertAuthKey ? els.alertAuthKey.value.trim() : ""
+      };
+      const res = await api("/api/alert-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (res && res.ok) {
+        if (els.alertMessage) setMessage(els.alertMessage, "Đã lưu cấu hình cảnh báo thành công!", "success");
+      } else {
+        throw new Error(res.error || "Lỗi lưu cấu hình");
+      }
+    } catch (err) {
+      if (els.alertMessage) setMessage(els.alertMessage, `Lỗi: ${err.message}`, "error");
+    }
+  }
+
+  async function handleAlertTest() {
+    if (els.alertMessage) setMessage(els.alertMessage, "Đang lưu cấu hình và gửi cảnh báo…");
+    if (els.testAlertBtn) els.testAlertBtn.disabled = true;
+    await handleAlertConfigSave();
+    try {
+      const res = await api("/api/alert-test", { method: "POST" });
+      if (res && res.ok) {
+        if (els.alertMessage) setMessage(els.alertMessage, "Đã gửi lệnh phát cảnh báo thử nghiệm thành công! Vui lòng kiểm tra Zalo.", "success");
+      } else {
+        throw new Error(res.error || "Không thể kích hoạt test");
+      }
+    } catch (err) {
+      if (els.alertMessage) setMessage(els.alertMessage, `Lỗi gửi thử nghiệm: ${err.message}`, "error");
+    } finally {
+      if (els.testAlertBtn) els.testAlertBtn.disabled = false;
+      setTimeout(loadAlertConfig, 2500);
+    }
+  }
+
+  if (els.alertForm) els.alertForm.addEventListener("submit", handleAlertConfigSave);
+  if (els.testAlertBtn) els.testAlertBtn.addEventListener("click", handleAlertTest);
+
+  async function loadImuData() {
+    try {
+      const data = await api("/api/imu");
+      if (!data) return;
+      if (els.imuStatusPill) {
+        els.imuStatusPill.textContent = data.connected ? "Hoạt động" : "Chưa kết nối";
+        els.imuStatusPill.className = "status-pill " + (data.connected ? "status-online" : "status-offline");
+      }
+      if (data.valid) {
+        const roll = Number(data.roll || 0);
+        const pitch = Number(data.pitch || 0);
+        if (els.imuRoll) els.imuRoll.textContent = roll.toFixed(1);
+        if (els.imuPitch) els.imuPitch.textContent = pitch.toFixed(1);
+        if (els.rollBike) els.rollBike.setAttribute("transform", `rotate(${roll.toFixed(1)} 160 95)`);
+        if (els.pitchScene) els.pitchScene.setAttribute("transform", `rotate(${pitch.toFixed(1)} 160 115)`);
+
+        const ax = Number(data.ax || 0), ay = Number(data.ay || 0), az = Number(data.az || 0);
+        const totalAccel = Math.hypot(ax, ay, az);
+        if (els.imuAccel) els.imuAccel.textContent = totalAccel.toFixed(1);
+
+        const gx = Number(data.gx || 0), gy = Number(data.gy || 0), gz = Number(data.gz || 0);
+        const totalGyro = Math.hypot(gx, gy, gz);
+        if (els.imuGyro) els.imuGyro.textContent = totalGyro.toFixed(2);
+
+        if (els.imuTemp) els.imuTemp.textContent = Number(data.temperature || 0).toFixed(1);
+
+        if (els.fallAlertBanner) {
+          if (data.fall_detected) {
+            els.fallAlertBanner.classList.remove("hidden");
+            if (els.fallReason) els.fallReason.textContent = `(Roll: ${roll.toFixed(0)}°, Pitch: ${pitch.toFixed(0)}°)`;
+          } else {
+            els.fallAlertBanner.classList.add("hidden");
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  async function handleClearFallAlert() {
+    try {
+      if (els.fallAlertBanner) els.fallAlertBanner.classList.add("hidden");
+      await api("/api/imu/clear-alert", { method: "POST" });
+    } catch (_) {}
+  }
+
+  if (els.clearFallAlertBtn) els.clearFallAlertBtn.addEventListener("click", handleClearFallAlert);
+
   els.refreshStatus.addEventListener("click", refreshStatus);
+  loadAlertConfig();
+  loadImuData();
   loadOpenStreetMap();
   updateDestination();
   loadConfig();
   refreshStatus();
   refreshOfflineMapStats();
   window.setInterval(refreshStatus, 2000);
+  window.setInterval(loadImuData, 500);
 })();

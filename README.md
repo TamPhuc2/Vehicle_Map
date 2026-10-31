@@ -1,100 +1,60 @@
-# MotoMap
+# MotoMap — Smart Motorcycle Navigation & Safety System
+*Hệ thống dẫn đường thông minh & Cảnh báo an toàn cho xe máy*
 
-MotoMap là thiết bị chỉ đường độc lập dùng ESP32 DevKit/WROOM-32, GPS GY-NEO6MV2 và màn GMT147SPI ST7789 172×320 đặt ngang. iPhone chỉ dùng để chọn điểm đến và chia sẻ Internet; sau khi xác nhận có thể đóng Safari và khóa màn hình.
+---
 
-## Đấu dây
+## 🌐 Language / Ngôn ngữ
+- [English](#-english)
+- [Tiếng Việt](#-tiếng-việt)
 
-| Thiết bị | ESP32 |
-| --- | --- |
-| Màn VCC | 3V3 |
-| Màn GND | GND |
-| Màn SCK/CLK | GPIO18 |
-| Màn MOSI/SDA | GPIO23 |
-| Màn CS | GPIO5 |
-| Màn DC/A0 | GPIO25 |
-| Màn RST/RES | GPIO17 |
-| Màn BL/LED | GPIO32 |
-| GPS VCC | 3V3 |
-| GPS GND | GND |
-| GPS TX | GPIO26 (ESP32 RX2) |
-| GPS RX | GPIO27 (ESP32 TX2, tùy chọn) |
+---
 
-GPIO4 và GPIO5 không được firmware sử dụng.
+# 🇬🇧 English
 
-## Build và nạp
+MotoMap is an open-source, standalone motorcycle navigation and rider safety device powered by ESP32 microcontrollers. Using an onboard GPS module and high-visibility SPI display, MotoMap delivers turn-by-turn navigation without requiring continuous phone screen operation.
 
-Mở đúng thư mục `D:\Project ESP32 Moto_Map\moto_map` trong VS Code/PlatformIO rồi chạy:
+### 🚀 Key Hardware Editions
+1. **[ESP32-S3 N16R8 Edition (`n16r8_ver`)](n16r8_ver/README.md) *(Recommended / Active)***:
+   - **Hardware:** ESP32-S3 DevKitC-1 (16 MB Flash, 8 MB Octal PSRAM).
+   - **Display:** 2.0" / 1.69" ST7789 320×240 IPS display.
+   - **Heading-Up Navigation:** Real-time rotating map and route aligned with vehicle heading.
+   - **Double-Buffered in PSRAM:** 400×400 canvas rendered entirely in Octal PSRAM (zero flicker, zero Flash wear).
+   - **Offline Maps:** 13.25 MB LittleFS map tile storage with 3-tier memory caching.
+   - **Fall & Crash Detection:** Real-time IMU MPU-6050 monitoring on FreeRTOS Core 0.
+   - **Automated Emergency SOS:** Auto-triggers location and crash alerts via Cloudflare Gateway to Zalo Bot.
+   - **Video Animations:** Smooth 24 FPS 10-second boot animations loaded into PSRAM.
 
-```powershell
-platformio run
-platformio run --target upload
-platformio run --target uploadfs
-platformio device monitor --baud 115200
-```
+2. **[ESP32 Classic Edition (`moto_map`)](moto_map/README.md)**:
+   - **Hardware:** ESP32-WROOM-32 / DevKit (4 MB Flash, No PSRAM).
+   - **Display:** GMT147SPI ST7789 172×320 display.
+   - **Navigation:** Lightweight turn-by-turn arrows and distance indicators.
 
-Phải nạp cả firmware lẫn filesystem. Project dùng partition 4 MB không OTA: app 2 MB, LittleFS khoảng 1,875 MB và coredump 64 KB.
+### 📱 Smartphone Companion & Web Portal
+- **Web Portal:** Connect your smartphone to the device's hotspot or Wi-Fi to select destinations, download offline map areas, monitor real-time vehicle tilt, and configure emergency contacts.
+- **iOS Companion App:** Native Swift application located in [`ios/MotoMap`](ios/MotoMap/README.md).
 
-## Sử dụng lần đầu
+---
 
-1. Bật **Dữ liệu di động**, **Điểm truy cập cá nhân**, **Cho phép người khác kết nối** và **Tối đa hóa tương thích** trên iPhone.
-2. ESP32 thử nối hotspot đã lưu trong 20 giây. Nếu chưa có cấu hình, nó phát Wi-Fi `MotoMap-ESP32`, mật khẩu `motomap123`.
-3. Kết nối iPhone vào Wi-Fi đó và mở `http://192.168.4.1/`.
-4. Nhập tên/mật khẩu hotspot iPhone, tìm địa chỉ hoặc ghim bản đồ, rồi bấm **Xác nhận & bắt đầu**.
-5. ESP32 lưu cấu hình, chuyển sang hotspot sau 5 giây và hiện IP mới trên màn hình.
-6. Các lần sau mở `http://motomap.local/` hoặc IP đang hiện trên màn hình để chọn điểm đến mới.
+# 🇻🇳 Tiếng Việt
 
-Sau khi xác nhận, GPS và routing chạy trên ESP32. Safari có thể đóng. Khi lệch tuyến trên 60 m trong ba lần GPS liên tiếp, ESP32 tự gọi OSRM để tính lại.
+MotoMap là thiết bị dẫn đường độc lập và cảnh báo an toàn cho xe máy trên nền tảng vi điều khiển ESP32. Kết hợp module định vị GPS và màn hình màu SPI độ sáng cao, MotoMap mang đến trải nghiệm dẫn đường từng khúc cua mà không cần bật sáng màn hình điện thoại liên tục.
 
-Nếu hotspot mất, ESP32 tiếp tục tuyến đang có trong RAM. Khi đang lệch mà mất mạng, màn hình báo chờ và tự reroute sau khi hotspot trở lại.
+### 🚀 Các phiên bản phần cứng
+1. **[Phiên bản ESP32-S3 N16R8 (`n16r8_ver`)](n16r8_ver/README.md) *(Khuyên dùng / Đang phát triển)***:
+   - **Phần cứng:** ESP32-S3 DevKitC-1 (16 MB Flash, 8 MB Octal PSRAM).
+   - **Màn hình:** ST7789 320×240 IPS (2.0" hoặc 1.69").
+   - **Bản đồ xoay theo hướng xe (Heading-Up):** Bản đồ và tuyến đường xoay mượt mà theo góc la bàn / GPS.
+   - **Double-Buffering trong PSRAM:** Canvas 400×400 xử lý hoàn toàn trong 8MB PSRAM (không giật hình, không hại bộ nhớ Flash).
+   - **Bản đồ Offline:** Phân vùng LittleFS 13.25 MB với bộ đệm 3 tầng.
+   - **Phát hiện té ngã (IMU MPU-6050):** Tác vụ FreeRTOS chạy độc lập trên Core 0.
+   - **Cảnh báo cứu hộ SOS tự động:** Tự động gửi định vị và thông báo ngã tới Zalo Bot người thân qua Cloudflare Gateway.
+   - **Video Animation:** Phát video 24 FPS mượt mà trực tiếp từ PSRAM.
 
-## HTTP API
+2. **[Phiên bản ESP32 Classic (`moto_map`)](moto_map/README.md)**:
+   - **Phần cứng:** ESP32 DevKit / WROOM-32 (4 MB Flash, không PSRAM).
+   - **Màn hình:** GMT147SPI ST7789 172×320.
+   - **Dẫn đường:** Mũi tên chỉ hướng tinh gọn và thanh cự ly rẽ.
 
-```text
-GET  /api/status
-GET  /api/config
-POST /api/config/wifi
-POST /api/destination
-POST /api/navigation/stop
-POST /api/navigation/reroute
-
-POST   /api/media/animation/begin
-POST   /api/media/animation/frame
-POST   /api/media/animation/commit
-DELETE /api/media/animation
-```
-
-Payload điểm đến:
-
-```json
-{
-  "lat": 10.8231,
-  "lon": 106.6297,
-  "label": "Điểm đã ghim",
-  "vehicle": "motorcycle",
-  "start": true
-}
-```
-
-Các endpoint cũ `/status`, `/navigation/stop`, `/mode/media`, `/mode/idle` và `/media/frame` vẫn được giữ để tương thích.
-
-## Animation JPEG 10 giây
-
-Web có thể chọn video và lưu 60 frame JPEG 320×172, 6 fps vào LittleFS. Animation tự lặp khi không navigation và tự dừng khi navigation bắt đầu.
-
-Để nạp video cùng filesystem bằng máy tính, cần FFmpeg:
-
-```powershell
-cd D:\Project ESP32 Moto_Map\moto_map
-.\tools\video_to_frames.ps1 -InputFile "D:\video\intro.mp4"
-platformio run --target uploadfs
-```
-
-Script tự giảm chất lượng cho tới khi tổng animation không quá 1,45 MB và mỗi frame không quá 32 KB. Chỉ có một animation tại một thời điểm; upload mới sẽ thay animation cũ.
-
-## Giới hạn
-
-- GPS cần nhìn thấy bầu trời; anten không nên bị kim loại che.
-- Public OSRM/Nominatim phù hợp prototype cá nhân, không phải dịch vụ production.
-- Profile public OSRM hiện là `driving` cho cả xe máy và ô tô.
-- Route nằm trong RAM; điểm đến/hotspot nằm trong NVS. Sau reboot, ESP32 xin route mới từ vị trí GPS hiện tại.
-- HTTPS tới OSRM đang dùng kết nối mã hóa nhưng chưa xác minh CA (`setInsecure`) cho bản prototype.
+### 📱 Giao diện Web Portal & Ứng dụng điện thoại
+- **Web Portal:** Mở trình duyệt trên điện thoại kết nối vào Wi-Fi của thiết bị để tìm kiếm điểm đến, tải bản đồ offline, theo dõi góc nghiêng xe và cài đặt số Zalo cứu hộ.
+- **Ứng dụng iOS:** Ứng dụng Swift tương thích trong thư mục [`ios/MotoMap`](ios/MotoMap/README.md).

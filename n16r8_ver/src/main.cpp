@@ -1,9 +1,11 @@
 #include <Arduino.h>
 
+#include "AlertManager.h"
 #include "ButtonManager.h"
 #include "ConnectionManager.h"
 #include "DisplayManager.h"
 #include "GpsManager.h"
+#include "ImuManager.h"
 #include "MediaManager.h"
 #include "ModeController.h"
 #if defined(MOTOMAP_NAV_MAP)
@@ -16,7 +18,9 @@
 ButtonManager buttonManager(PinConfig::kButtonPin);
 DisplayManager displayManager;
 SettingsStore settingsStore;
+AlertManager alertManager(&settingsStore);
 GpsManager gpsManager;
+ImuManager imuManager(&alertManager, &gpsManager);
 MediaManager mediaManager(&displayManager);
 ModeController modeController(&displayManager);
 RouteManager routeManager(&gpsManager, &settingsStore);
@@ -32,7 +36,11 @@ ConnectionManager connectionManager(
     &settingsStore
 #if defined(MOTOMAP_NAV_MAP)
     , &navigationMapManager
+#else
+    , nullptr
 #endif
+    , &alertManager
+    , &imuManager
 );
 
 void onNavigationUpdate(const NavigationData& data) {
@@ -49,7 +57,7 @@ void onNavigationUpdate(const NavigationData& data) {
 void setup() {
     Serial.begin(115200);
     delay(200);
-    setCpuFrequencyMhz(240); // ESP32-S3 chạy tối đa 240MHz
+    setCpuFrequencyMhz(240); // Set ESP32-S3 maximum CPU frequency to 240MHz
     Serial.println("\n==============================================");
     Serial.println("  MotoMap ESP32-S3 N16R8 (Heading-Up Navigation)");
     Serial.println("==============================================");
@@ -65,6 +73,8 @@ void setup() {
     buttonManager.begin();
     displayManager.begin();
     settingsStore.begin();
+    alertManager.begin();
+    imuManager.begin();
     gpsManager.begin();
     mediaManager.begin();
 #if defined(MOTOMAP_NAV_MAP)

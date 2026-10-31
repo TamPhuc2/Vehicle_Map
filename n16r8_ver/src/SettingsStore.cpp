@@ -12,6 +12,10 @@ constexpr char kDestinationLat[] = "dest_lat";
 constexpr char kDestinationLon[] = "dest_lon";
 constexpr char kDestinationLabel[] = "dest_label";
 constexpr char kDestinationVehicle[] = "dest_vehicle";
+constexpr char kAlertEnabled[] = "alrt_en";
+constexpr char kAlertGateway[] = "alrt_url";
+constexpr char kAlertAuthKey[] = "alrt_key";
+constexpr char kAlertChatIds[] = "alrt_chats";
 }
 
 bool SettingsStore::begin() {
@@ -100,6 +104,32 @@ bool SettingsStore::setDestinationActive(bool active) {
         return false;
     }
     const bool ok = preferences.putBool(kDestinationActive, active);
+    preferences.end();
+    return ok;
+}
+
+bool SettingsStore::loadAlertConfig(AlertConfig& config) const {
+    Preferences preferences;
+    if (!preferences.begin(kNamespace, true)) {
+        return false;
+    }
+    config.enabled = preferences.getBool(kAlertEnabled, true);
+    config.gatewayUrl = preferences.getString(kAlertGateway, "");
+    config.authKey = preferences.getString(kAlertAuthKey, "");
+    config.chatIds = preferences.getString(kAlertChatIds, "");
+    preferences.end();
+    return true;
+}
+
+bool SettingsStore::saveAlertConfig(const AlertConfig& config) {
+    Preferences preferences;
+    if (!preferences.begin(kNamespace, false)) {
+        return false;
+    }
+    bool ok = preferences.putBool(kAlertEnabled, config.enabled);
+    preferences.putString(kAlertGateway, config.gatewayUrl);
+    preferences.putString(kAlertAuthKey, config.authKey);
+    preferences.putString(kAlertChatIds, config.chatIds);
     preferences.end();
     return ok;
 }

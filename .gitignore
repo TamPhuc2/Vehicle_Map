@@ -2,12 +2,24 @@
 .platformio-local/
 .pio/
 **/.pio/
+**/build/
 
 # VS Code temporary / user settings
-.vscode/.browse.c_cpp.db*
-.vscode/c_cpp_properties.json
-.vscode/launch.json
-.vscode/ipch
+.vscode/
+**/.vscode/
+
+# Node.js & Cloudflare Worker artifacts
+node_modules/
+**/node_modules/
+.wrangler/
+**/.wrangler/
+.dev.vars
+**/.dev.vars
+
+# Environment & Secrets
+.env
+.env.*
+*.secret
 
 # AI & IDE local workspaces
 .kilo/

@@ -1,0 +1,8 @@
+name = "motomap-zalo-gateway"
+main = "src/index.js"
+compatibility_date = "2024-10-01"
+
+# Cac secret nhay cam se duoc luu tru an toan bang Cloudflare Secrets:
+#   npx wrangler secret put ZALO_BOT_TOKEN
+#   npx wrangler secret put GATEWAY_AUTH_KEY
+#   npx wrangler secret put ZALO_DEFAULT_CHAT_ID (tuy chon)

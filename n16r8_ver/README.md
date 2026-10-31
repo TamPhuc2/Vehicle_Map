@@ -1,110 +1,153 @@
-# MotoMap S3 — Phiên bản ESP32-S3 N16R8 (Heading-Up Navigation)
-
-Phiên bản nâng cấp dành riêng cho bo mạch **ESP32-S3 DevKit N16R8** (**16 MB Flash, 8 MB Octal PSRAM**).
-
----
-
-## ✨ Điểm nâng cấp chính so với bản cũ (ESP32 Classic 4MB)
-
-1. **Bản đồ xoay theo hướng di chuyển (Heading-Up Map):**
-   * Bản đồ và đường tuyến OSRM tự động xoay mượt mà theo góc la bàn / hướng GPS của xe.
-   * Mũi tên dẫn đường cố định ở góc 12 giờ (hướng nhìn thẳng về phía trước xe).
-   * Giao diện tinh gọn, tập trung hoàn toàn vào tầm nhìn cung đường.
-2. **Cập nhật tọa độ GPS tức thì (Dynamic Real-time Map):**
-   * Loại bỏ hoàn toàn giới hạn đứng yên / tốc độ < 2 km/h của bản cũ.
-   * Vị trí xe và bản đồ cập nhật ngay khi GPS trả fix mới (1Hz – 5Hz), không còn hiện tượng giữ lì khung hình.
-3. **Double Buffering & Stream 100% trong 8MB PSRAM (Không ghi Flash, Không chớp nháy):**
-   * Sử dụng 2 Sprite trong PSRAM: Canvas bản đồ xoay 400×400 và Framebuffer 320×240.
-   * Toàn bộ quá trình vẽ tile, tuyến đường, mũi tên và thanh điều hướng đều được ghép ngầm trong PSRAM và đẩy ra màn hình qua SPI DMA trong 1 nhịp quét (Zero-flicker).
-   * **Không ghi bản đồ vào Flash:** Các mảnh bản đồ PNG tải trực tiếp qua Wi-Fi hotspot từ điện thoại, giải mã thẳng vào bộ đệm 24 tile trong PSRAM (~3.0 MB). Tuyệt đối **không ghi/xóa Flash LittleFS** giúp bảo vệ tuổi thọ chip nhớ (Zero Flash Wear) và tải bản đồ siêu tốc.
-4. **Tải trước bản đồ theo lộ trình (Proactive Route Tile Pre-Fetching):**
-   * Quét trước dọc theo toàn bộ tuyến đường OSRM (lên đến 1000 điểm ~15-20 km phía trước xe).
-   * Tác vụ ngầm tự động tải trước các tile của cung đường sắp đi qua và nạp vào 24 slot PSRAM cache.
-   * Khi xe chạy tới ngã rẽ hay đoạn đường mới, bản đồ đã có sẵn trong PSRAM, hiển thị lập tức không có độ trễ.
-   * Thuật toán LRU bảo vệ thông minh: Tuyệt đối không xóa các tile đang hiển thị trên màn hình hiện tại khi nạp tile mới.
-5. **Video Animation 10s chuyển động siêu mượt 24 FPS (như xem trên điện thoại):**
-   * Hỗ trợ chuẩn video 24 FPS (lên tới 240 frames cho video 10 giây) với độ phân giải đầy đủ 320×240.
-   * **Nạp 100% vào Octal PSRAM:** Toàn bộ ~2.5 MB – 3.5 MB dữ liệu của 240 frames được nạp sẵn vào PSRAM. Khi phát, chip đọc trực tiếp từ Octal PSRAM tốc độ cao, loại bỏ hoàn toàn hiện tượng khựng/giật do đọc Flash, chuyển động trơn tru mượt mà như 1 video trên điện thoại.
-6. **LittleFS dành trọn vẹn cho Web App & Video Media (~11.75 MB):**
-   * Do bản đồ chạy trực tiếp trên RAM, LittleFS không bị chiếm dụng bởi cache bản đồ.
-   * Toàn bộ dung lượng ~11.75 MB dành riêng cho giao diện web chọn điểm đến và lưu trữ video animation màn hình chờ.
+# MotoMap S3 — ESP32-S3 N16R8 Edition
+*Heading-Up Navigation, Offline Maps, Fall Detection & Emergency Zalo SOS*  
+*Chỉ đường Heading-Up, Bản đồ Offline, Cảm biến té ngã & Cảnh báo SOS Zalo*
 
 ---
 
-## 🔌 Sơ đồ đấu dây chân (Pinout ESP32-S3)
+## 🌐 Language / Ngôn ngữ
+- [English](#-english)
+- [Tiếng Việt](#-tiếng-việt)
 
-> ⚠️ **LƯU Ý CỰC KỲ QUAN TRỌNG:**
-> Trên ESP32-S3 bản N16R8, các chân **GPIO 26 đến GPIO 37** được chip sử dụng nội bộ cho đường truyền Flash và Octal PSRAM. **TUYỆT ĐỐI KHÔNG NỐI DÂY VÀO CÁC CHÂN NÀY.**
+---
 
-Cấu hình mặc định trong [include/PinConfig.h](include/PinConfig.h):
+# 🇬🇧 English
 
-| Thiết bị | Chân màn / GPS | ESP32-S3 GPIO | Ghi chú |
+Dedicated firmware for **ESP32-S3 DevKitC-1 N16R8** (**16 MB Flash, 8 MB Octal PSRAM**). MotoMap is a standalone motorcycle navigation and rider safety device featuring offline and real-time mapping, fall detection via IMU, and automatic emergency SOS messaging via Zalo Bot.
+
+### ✨ Key Features
+1. **Heading-Up Navigation:** Smooth map and route rotation matching vehicle heading. Navigation arrow fixed at 12 o'clock.
+2. **Real-time GPS Tracking:** Dynamic updates at 1 Hz – 5 Hz without artificial speed locks.
+3. **Double Buffering in 8MB PSRAM:** 400×400 rotating map canvas and 320×240 framebuffer rendered in PSRAM via DMA SPI (zero flicker, zero Flash wear).
+4. **Proactive Route Tile Pre-Fetching:** Background task pre-caches tiles along upcoming route segments.
+5. **Fall Detection via IMU (MPU-6050):** On-device FreeRTOS task on Core 0 calculates real-time Roll and Pitch angles. If tilt exceeds 45° for 5 seconds, an emergency alert is triggered.
+6. **Automated SOS Alerts via Zalo Bot:** Automatically packages latest GPS location, heading, and speed, and sends an alert through a Cloudflare Gateway Worker to emergency Zalo contacts.
+7. **Interactive Web Dashboard:** Real-time motorcycle tilt visualizer (SVG), offline map downloader, and Wi-Fi/alert settings.
+8. **10s 24 FPS Boot Video Animation:** Fully loaded into Octal PSRAM for stutter-free playback.
+
+---
+
+### 🔌 Pinout Configuration (ESP32-S3 N16R8)
+
+> ⚠️ **CRITICAL HARDWARE NOTE:**  
+> On ESP32-S3 N16R8, **GPIO 26 through GPIO 37** are reserved internally for Octal Flash and Octal PSRAM. **DO NOT CONNECT ANY PINS IN THIS RANGE.**
+
+| Peripheral | Pin Label | ESP32-S3 GPIO | Function / Notes |
 | :--- | :--- | :--- | :--- |
-| **Màn ST7789** | VCC | 3V3 / 5V | Nguồn màn hình |
+| **ST7789 Display** | VCC | 3V3 / 5V | Power |
+| | GND | GND | Ground |
+| | **SCL / SCK** | **GPIO 13** | SPI Clock (FSPI) |
+| | **SDA / MOSI** | **GPIO 12** | SPI Data (FSPI) |
+| | **RST / RES** | **GPIO 11** | Reset |
+| | **DC / A0** | **GPIO 10** | Data / Command |
+| | **CS** | **GPIO 9** | Chip Select *(Dedicated to LCD)* |
+| **NEO-6M GPS** | VCC | 3V3 / 5V | Power |
+| | GND | GND | Ground |
+| | TX | **GPIO 17** | GPS TX -> ESP32-S3 RX |
+| | RX | **GPIO 18** | GPS RX <- ESP32-S3 TX (Optional) |
+| **MPU-6050 IMU** | VCC | 3V3 | Power |
+| | GND | GND | Ground |
+| | **SDA** | **GPIO 8** | I2C Data |
+| | **SCL** | **GPIO 7** | I2C Clock *(Avoid GPIO 9 CS conflict)* |
+| **Push Button** | KEY / BOOT | **GPIO 0** | Onboard BOOT Button (Active LOW) |
+
+---
+
+### 🛠️ Build and Flash (PlatformIO)
+
+```bash
+cd n16r8_ver
+
+# Build firmware
+pio run -e esp32s3_n16r8
+
+# Build filesystem (LittleFS)
+pio run -e esp32s3_n16r8 -t buildfs
+
+# Upload firmware and filesystem
+pio run -e esp32s3_n16r8 -t upload
+pio run -e esp32s3_n16r8 -t uploadfs
+
+# Open Serial Monitor
+pio device monitor --baud 115200
+```
+
+---
+
+### 📡 HTTP REST API Reference
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/status` | System status, navigation state, GPS snapshot |
+| `GET` | `/api/config` | Current configuration |
+| `POST` | `/api/config/wifi` | Set Wi-Fi hotspot SSID and password |
+| `POST` | `/api/destination` | Set route destination coordinates |
+| `POST` | `/api/navigation/stop` | Cancel active route navigation |
+| `POST` | `/api/navigation/reroute` | Force recalculate route from current GPS |
+| `GET` | `/api/imu` | Real-time roll/pitch, acceleration, gyro, fall status |
+| `POST` | `/api/imu/clear-alert` | Manually dismiss fall detection alert |
+| `GET` | `/api/alert-config` | Read emergency Zalo alert settings |
+| `POST` | `/api/alert-config` | Update Cloudflare Gateway URL, token, Chat IDs |
+| `POST` | `/api/alert-test` | Dispatch test SOS alert with current GPS location |
+
+---
+
+# 🇻🇳 Tiếng Việt
+
+Bản nâng cấp firmware chuyên dụng cho bo mạch **ESP32-S3 DevKitC-1 N16R8** (**16 MB Flash, 8 MB Octal PSRAM**). MotoMap là thiết bị dẫn đường độc lập trên xe máy kiêm hệ thống an toàn thông minh: dẫn đường xoay theo hướng xe, bản đồ offline, cảm biến phát hiện té ngã và tự động gửi tin nhắn khẩn cấp qua Zalo Bot.
+
+### ✨ Tính năng nổi bật
+1. **Bản đồ xoay theo hướng di chuyển (Heading-Up Navigation):** Bản đồ và tuyến đường OSRM tự động xoay mượt mà theo góc la bàn / GPS. Mũi tên dẫn đường cố định ở góc 12 giờ.
+2. **Định vị GPS thời gian thực:** Cập nhật vị trí liên tục ở tần số 1 Hz – 5 Hz, không bị giới hạn vận tốc.
+3. **Double Buffering 100% trong 8MB PSRAM:** Canvas bản đồ xoay 400×400 và Framebuffer 320×240 xử lý hoàn toàn trong PSRAM qua DMA SPI (không chớp nháy, không ghi Flash hại chip nhớ).
+4. **Tải trước bản đồ theo lộ trình (Tile Pre-Fetching):** Tác vụ nền tự động tải trước các mảnh bản đồ trên đoạn đường sắp đi qua.
+5. **Cảm biến phát hiện té ngã (MPU-6050):** Tác vụ FreeRTOS trên Core 0 tính toán góc nghiêng Roll và Pitch. Khi xe nghiêng quá 45° liên tục trong 5 giây, hệ thống tự động xác nhận tai nạn.
+6. **Tự động gửi cảnh báo SOS qua Zalo Bot:** Đóng gói toạ độ GPS, vận tốc, hướng di chuyển và gửi qua Cloudflare Gateway Worker tới tài khoản Zalo của người thân.
+7. **Web Dashboard trực quan:** Mô phỏng góc nghiêng xe máy thời gian thực (SVG), tải bản đồ offline, cấu hình Wi-Fi và SOS.
+8. **Video Animation 10s 24 FPS mượt mà:** Nạp sẵn toàn bộ vào Octal PSRAM cho trải nghiệm chuyển động trơn tru.
+
+---
+
+### 🔌 Sơ đồ đấu nối chân (ESP32-S3 N16R8)
+
+> ⚠️ **LƯU Ý CỰC KỲ QUAN TRỌNG:**  
+> Trên ESP32-S3 N16R8, dải chân **GPIO 26 đến GPIO 37** được dùng nội bộ cho Octal Flash và Octal PSRAM. **TUYỆT ĐỐI KHÔNG ĐẤU NỐI VÀO CÁC CHÂN NÀY.**
+
+| Thiết bị ngoại vi | Chân linh kiện | GPIO ESP32-S3 | Chức năng / Ghi chú |
+| :--- | :--- | :--- | :--- |
+| **Màn hình ST7789** | VCC | 3V3 / 5V | Nguồn màn hình |
 | | GND | GND | Mass |
-| | **SCL** / SCK | **GPIO 13** | SPI SCLK (FSPI) |
-| | **SDA** / MOSI | **GPIO 12** | SPI MOSI (FSPI) |
-| | **RST** / RES | **GPIO 11** | Reset màn hình |
-| | **DC** / A0 / RS | **GPIO 10** | Data / Command |
-| | **CS** | **GPIO 9** | Chip Select |
-| **GPS NEO-6M** | VCC | 3V3 / 5V | Nguồn GPS |
+| | **SCL / SCK** | **GPIO 13** | SPI Clock (FSPI) |
+| | **SDA / MOSI** | **GPIO 12** | SPI Data (FSPI) |
+| | **RST / RES** | **GPIO 11** | Reset màn hình |
+| | **DC / A0** | **GPIO 10** | Data / Command |
+| | **CS** | **GPIO 9** | Chip Select *(Dành riêng cho LCD)* |
+| **Module GPS NEO-6M** | VCC | 3V3 / 5V | Nguồn GPS |
 | | GND | GND | Mass |
-| | TX | **GPIO 17** | Nối vào chân RX của ESP32-S3 |
-| | RX | **GPIO 18** | Nối vào chân TX của ESP32-S3 (tùy chọn) |
-| **Nút bấm** | KEY / BOOT | **GPIO 0** | Nút BOOT có sẵn trên board ESP32-S3 |
-
-*(Nếu bạn muốn đổi chân khác, chỉ cần sửa lại trong file `include/PinConfig.h` hoặc khai báo cờ `-DPIN_...` trong `platformio.ini`)*.
-
----
-
-## 🛠️ Biên dịch và Nạp Code
-
-Mở thư mục `n16r8_ver` trong VS Code hoặc PowerShell:
-
-```powershell
-cd "d:\Self-Project\Project ESP32 Moto_Map\n16r8_ver"
-
-# Biên dịch firmware
-.\build.cmd build
-
-# Nạp firmware vào ESP32-S3
-.\build.cmd upload
-
-# Nạp giao diện Web / dữ liệu LittleFS (HTML, CSS, JS, ảnh)
-.\build.cmd uploadfs
-
-# Mở Serial Monitor xem log
-.\build.cmd monitor
-```
+| | TX | **GPIO 17** | GPS TX -> ESP32-S3 RX |
+| | RX | **GPIO 18** | GPS RX <- ESP32-S3 TX (Tùy chọn) |
+| **Cảm biến MPU-6050** | VCC | 3V3 | Nguồn cảm biến |
+| | GND | GND | Mass |
+| | **SDA** | **GPIO 8** | I2C Data |
+| | **SCL** | **GPIO 7** | I2C Clock *(Tránh xung đột chân CS 9)* |
+| **Nút nhấn vật lý** | KEY / BOOT | **GPIO 0** | Nút BOOT tích hợp trên bo mạch |
 
 ---
 
-## 📋 Phân vùng bộ nhớ 16 MB (`partitions_16mb.csv` - Không OTA)
+### 🛠️ Lệnh biên dịch và Nạp Code
 
-* **NVS:** 28 KB (`0x7000`)
-* **Firmware App Factory:** 4 MB (`0x400000` = 4,194,304 bytes)
-* **LittleFS File System:** ~11.75 MB (`0xBC0000` = 12,320,768 bytes)
-* **CoreDump:** 192 KB (`0x30000`)
+```bash
+cd n16r8_ver
 
----
+# 1. Biên dịch firmware
+pio run -e esp32s3_n16r8
 
-## 🎬 Tạo video 10s 24 FPS mượt mà cho ESP32-S3
+# 2. Đóng gói phân vùng LittleFS (Web UI & Assets)
+pio run -e esp32s3_n16r8 -t buildfs
 
-Bạn có 2 cách đưa video vào thiết bị:
+# 3. Nạp firmware và LittleFS vào mạch
+pio run -e esp32s3_n16r8 -t upload
+pio run -e esp32s3_n16r8 -t uploadfs
 
-### Cách 1: Nạp từ máy tính qua PowerShell (Chất lượng sắc nét nhất)
-Chạy script tự động cắt frame và nén bằng ffmpeg:
-```powershell
-powershell -ExecutionPolicy Bypass -File tools/video_to_frames.ps1 -InputFile "duong_dan_video.mp4" -Fps 24 -Seconds 10 -Width 320 -Height 240
+# 4. Mở Serial Monitor theo dõi log
+pio device monitor --baud 115200
 ```
-Sau đó nạp vào bộ nhớ LittleFS của ESP32-S3:
-```powershell
-.\build.cmd uploadfs
-```
-
-### Cách 2: Tải trực tiếp qua Web App trên điện thoại
-1. Kết nối điện thoại vào Wi-Fi của MotoMap (hoặc truy cập IP của thiết bị khi kết nối hotspot).
-2. Mở trình duyệt vào giao diện MotoMap, kéo xuống phần **MEDIA**.
-3. Chọn video 10s từ album điện thoại, nhấn **Lưu làm Animation**.
-4. Trình duyệt sẽ tự động render các frame ở 24 FPS và gửi qua ESP32-S3. ESP32-S3 sẽ lưu vào LittleFS và tự động nạp toàn bộ vào PSRAM để phát mượt mà như xem trên điện thoại.
-
