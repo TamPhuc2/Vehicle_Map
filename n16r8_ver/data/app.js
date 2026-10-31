@@ -20,9 +20,9 @@
   const els = {
     deviceStatus: $("device-status"), connectionDetail: $("connection-detail"), stationWebLink: $("station-web-link"), refreshStatus: $("refresh-status"),
     wifiForm: $("wifi-form"), wifiSsid: $("wifi-ssid"), wifiPassword: $("wifi-password"), saveWifi: $("save-wifi"), wifiMessage: $("wifi-message"),
-    searchForm: $("search-form"), addressInput: $("address-input"), coordinateForm: $("coordinate-form"),
+    searchForm: $("search-form"), searchProvider: $("search-provider"), addressInput: $("address-input"), coordinateForm: $("coordinate-form"),
     coordinateInput: $("coordinate-input"), vehicleSelect: $("vehicle-select"), searchMessage: $("search-message"),
-    searchResults: $("search-results"), locationQuality: $("location-quality"), destinationDetail: $("destination-detail"), mapStatus: $("map-status"),
+    searchResults: $("search-results"), locationQuality: $("location-quality"), destinationDetail: $("destination-detail"), mapStyle: $("map-style"), mapStatus: $("map-status"),
     centerGps: $("center-gps"), clearDestination: $("clear-destination"), gpsStatus: $("gps-status"),
     routeState: $("route-state"), instructionDistance: $("instruction-distance"), instructionRoad: $("instruction-road"),
     routeDetail: $("route-detail"), startNavigation: $("start-navigation"), stopNavigation: $("stop-navigation"),
@@ -86,6 +86,62 @@
     if (mapElement && !mapReady()) mapElement.textContent = message;
   }
 
+  let currentTileLayer = null;
+
+  function getMapTileLayer(styleKey) {
+    const mapboxKey = getMapboxApiKey();
+    if (styleKey === "mapbox" && mapboxKey && mapboxKey !== "DIEN_MAPBOX_TOKEN_VAO_DAY") {
+      return {
+        layer: window.L.tileLayer(
+          "https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/512/{z}/{x}/{y}@2x?access_token=" + mapboxKey,
+          {
+            tileSize: 512,
+            zoomOffset: -1,
+            maxZoom: 22,
+            attribution: "© Mapbox"
+          }
+        ),
+        name: "Mapbox HD",
+        status: "Mapbox Streets v12 Online"
+      };
+    }
+
+    if (styleKey === "google") {
+      return {
+        layer: window.L.tileLayer(
+          "https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=vi",
+          {
+            subdomains: ["0", "1", "2", "3"],
+            maxZoom: 20,
+            attribution: "© Google Maps"
+          }
+        ),
+        name: "Google Maps",
+        status: "Google Road Tiles Online"
+      };
+    }
+
+    return {
+      layer: window.L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "© OpenStreetMap contributors"
+      }),
+      name: "OSM",
+      status: "OSM Standard Online"
+    };
+  }
+
+  function applyMapLayer(styleKey) {
+    if (!mapReady()) return;
+    const tileConfig = getMapTileLayer(styleKey);
+    if (currentTileLayer) {
+      map.removeLayer(currentTileLayer);
+    }
+    currentTileLayer = tileConfig.layer;
+    currentTileLayer.addTo(map);
+    setTag(els.mapStatus, tileConfig.status, "success");
+  }
+
   function initialiseOsmMap() {
     if (mapReady() || !window.L) return mapReady();
     const mapElement = $("map");
@@ -93,11 +149,19 @@
 
     mapElement.replaceChildren();
     leafletAvailable = true;
-    map = window.L.map("map", { zoomControl: true }).setView([10.8231, 106.6297], 13);
-    window.L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-    }).addTo(map);
+    const defaultLat = Number(window.MOTOMAP_ENV?.DEFAULT_LAT) || 10.880539600217121;
+    const defaultLon = Number(window.MOTOMAP_ENV?.DEFAULT_LON) || 106.80541333694616;
+    map = window.L.map("map", { zoomControl: true }).setView([defaultLat, defaultLon], 16);
+
+    const initialStyle = els.mapStyle ? els.mapStyle.value : "mapbox";
+    applyMapLayer(initialStyle);
+
+    if (els.mapStyle) {
+      els.mapStyle.addEventListener("change", () => {
+        applyMapLayer(els.mapStyle.value);
+      });
+    }
+
     map.on("click", (event) => {
       setDestination(event.latlng.lat, event.latlng.lng, "Điểm ghim thủ công", true);
       setMessage(els.searchMessage, "Đã đặt điểm đến trên bản đồ.", "success");
@@ -105,14 +169,13 @@
     if (state.destination) renderDestinationMarker();
     if (state.gps?.valid) updateGpsMarker(state.gps);
     window.requestAnimationFrame(() => map.invalidateSize());
-    setTag(els.mapStatus, "OSM online", "success");
     return true;
   }
 
   function loadOpenStreetMap() {
     if (initialiseOsmMap() || mapLoadFailed) return;
-    showMapUnavailable("Đang tải bản đồ OpenStreetMap…");
-    setTag(els.mapStatus, "Đang tải OSM…");
+    showMapUnavailable("Đang tải dữ liệu bản đồ…");
+    setTag(els.mapStatus, "Đang tải bản đồ…");
 
     const style = document.createElement("link");
     style.rel = "stylesheet";
@@ -127,8 +190,8 @@
       if (finished) return;
       finished = true;
       mapLoadFailed = true;
-      showMapUnavailable("Không tải được OSM. Hãy mở web khi điện thoại có Internet rồi làm mới trang.");
-      setTag(els.mapStatus, "OSM cần Internet", "warning");
+      showMapUnavailable("Không tải được bản đồ. Hãy mở web khi điện thoại có Internet rồi làm mới trang.");
+      setTag(els.mapStatus, "Cần kết nối Internet", "warning");
     };
     script.onload = () => {
       if (finished) return;
@@ -218,52 +281,315 @@
     if (els.downloadRouteMap) els.downloadRouteMap.disabled = false;
   }
 
+  function getLocationIqApiKey() {
+    return (window.MOTOMAP_ENV && window.MOTOMAP_ENV.LOCATIONIQ_API_KEY)
+      ? String(window.MOTOMAP_ENV.LOCATIONIQ_API_KEY).trim()
+      : "";
+  }
+
+  function getMapboxApiKey() {
+    return (window.MOTOMAP_ENV && window.MOTOMAP_ENV.MAPBOX_API_KEY)
+      ? String(window.MOTOMAP_ENV.MAPBOX_API_KEY).trim()
+      : "";
+  }
+
+  function getReferenceCoords() {
+    if (state.gps?.valid) {
+      return { lat: Number(state.gps.lat), lon: Number(state.gps.lon) };
+    }
+    return {
+      lat: Number(window.MOTOMAP_ENV?.DEFAULT_LAT) || 10.880539600217121,
+      lon: Number(window.MOTOMAP_ENV?.DEFAULT_LON) || 106.80541333694616
+    };
+  }
+
+  async function searchAddressWithMapbox(query, apiKey) {
+    const ref = getReferenceCoords();
+    // 1. Ưu tiên Mapbox Search Box API v1 (hỗ trợ POI, tòa nhà, trường học, quán xá và số nhà tại VN cực chuẩn)
+    const sbParams = new URLSearchParams({
+      q: query,
+      access_token: apiKey,
+      country: "VN",
+      language: "vi",
+      limit: "5",
+      proximity: ref.lon + "," + ref.lat
+    });
+    const sbUrl = "https://api.mapbox.com/search/searchbox/v1/forward?" + sbParams.toString();
+    const sbRes = await fetch(sbUrl, { cache: "no-store" });
+    if (sbRes.ok) {
+      const sbData = await sbRes.json();
+      if (Array.isArray(sbData.features) && sbData.features.length > 0) {
+        return sbData.features.map((f) => {
+          const props = f.properties || {};
+          const coords = f.geometry?.coordinates || [0, 0];
+          const name = props.name || "";
+          const fullAddr = props.full_address || props.place_formatted || name;
+          return {
+            name: name || fullAddr.split(",")[0],
+            display_name: fullAddr.includes(name) ? fullAddr : (name ? name + " — " + fullAddr : fullAddr),
+            lat: Number(coords[1]),
+            lon: Number(coords[0]),
+            address: {
+              house_number: props.Context?.address?.address_number || (props.feature_type === "address" || props.feature_type === "poi" ? "yes" : "")
+            }
+          };
+        });
+      }
+    }
+
+    // 2. Dự phòng sang Mapbox Geocoding API v5
+    const v5Params = new URLSearchParams({
+      access_token: apiKey,
+      country: "vn",
+      language: "vi",
+      limit: "5",
+      autocomplete: "true",
+      proximity: ref.lon + "," + ref.lat
+    });
+    const v5Url = "https://api.mapbox.com/geocoding/v5/mapbox.places/" + encodeURIComponent(query) + ".json?" + v5Params.toString();
+    const response = await fetch(v5Url, { cache: "no-store" });
+    if (!response.ok) {
+      let detail = "";
+      try {
+        const errJson = await response.json();
+        detail = errJson.message ? " (" + errJson.message + ")" : "";
+      } catch (_) {}
+      throw new Error("Mapbox HTTP " + response.status + detail);
+    }
+    const data = await response.json();
+    return (data.features || []).map((f) => ({
+      name: f.text_vi || f.text || (f.place_name ? f.place_name.split(",")[0] : ""),
+      display_name: f.place_name_vi || f.place_name || "",
+      lat: Array.isArray(f.center) ? f.center[1] : 0,
+      lon: Array.isArray(f.center) ? f.center[0] : 0,
+      address: {
+        house_number: f.address || (Array.isArray(f.place_type) && f.place_type.includes("address") ? "yes" : "")
+      }
+    }));
+  }
+
+  async function searchAddressWithLocationIq(query, apiKey) {
+    const ref = getReferenceCoords();
+    const params = new URLSearchParams({
+      key: apiKey,
+      q: query,
+      countrycodes: "vn",
+      format: "json",
+      limit: "5",
+      "accept-language": "vi",
+      lat: String(ref.lat),
+      lon: String(ref.lon)
+    });
+    const response = await fetch("https://us1.locationiq.com/v1/autocomplete?" + params.toString(), { cache: "no-store" });
+    if (!response.ok) throw new Error("LocationIQ HTTP " + response.status);
+    return response.json();
+  }
+
   async function searchAddress(address) {
     const wait = SEARCH_DELAY_MS - (Date.now() - state.lastSearchAt);
     if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
     state.lastSearchAt = Date.now();
     const params = new URLSearchParams({ q: address, format: "jsonv2", addressdetails: "1", limit: "5", "accept-language": "vi" });
-    const response = await fetch(`${NOMINATIM_URL}?${params}`, { headers: { Accept: "application/json" }, cache: "no-store" });
-    if (!response.ok) throw new Error(`Nominatim HTTP ${response.status}`);
+    const response = await fetch(NOMINATIM_URL + "?" + params.toString(), { headers: { Accept: "application/json" }, cache: "no-store" });
+    if (!response.ok) throw new Error("Nominatim HTTP " + response.status);
     return response.json();
   }
 
-  function renderSearchResults(results) {
+  function approxDistanceMeters(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function mergeMultiSourceResults(mapboxList, locationIqList, osmList, maxTotal = 10) {
+    const tagged = [];
+    const maxLen = Math.max(mapboxList.length, locationIqList.length, osmList.length);
+    // Đan xen kết quả (Interleave) từ cả 3 nguồn để danh sách vừa có POI/Hẻm (Mapbox) vừa có Số nhà/Trường học (LocationIQ & OSM)
+    for (let i = 0; i < maxLen; i++) {
+      if (i < mapboxList.length) tagged.push({ ...mapboxList[i], _source: "mapbox" });
+      if (i < locationIqList.length) tagged.push({ ...locationIqList[i], _source: "locationiq" });
+      if (i < osmList.length) tagged.push({ ...osmList[i], _source: "osm" });
+    }
+
+    const deduplicated = [];
+    for (const item of tagged) {
+      const lat = Number(item.lat);
+      const lon = Number(item.lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+      const itemTitle = String(item.name || item.display_name || "").split(",")[0].trim().toLowerCase();
+
+      // Khử trùng lặp nếu 2 API trả về cùng 1 điểm cách nhau < 25m và cùng tên đầu
+      const isDuplicate = deduplicated.some((existing) => {
+        const dist = approxDistanceMeters(lat, lon, Number(existing.lat), Number(existing.lon));
+        const existingTitle = String(existing.name || existing.display_name || "").split(",")[0].trim().toLowerCase();
+        return dist < 25 && itemTitle === existingTitle;
+      });
+
+      if (!isDuplicate) {
+        deduplicated.push(item);
+        if (deduplicated.length >= maxTotal) break;
+      }
+    }
+    return deduplicated;
+  }
+
+  function renderSearchResults(results, defaultSource = "osm", summaryText = "") {
     els.searchResults.replaceChildren();
-    if (!results.length) {
-      setMessage(els.searchMessage, "Không tìm thấy. Hãy thử địa chỉ ngắn hơn hoặc tự ghim bản đồ.", "error");
+    const defaultLabel = defaultSource === "mapbox" ? "Mapbox" : (defaultSource === "locationiq" ? "LocationIQ" : "OSM");
+    if (!results || !results.length) {
+      setMessage(els.searchMessage, (summaryText || "[" + defaultLabel + "]") + " Không tìm thấy kết quả. Hãy thử từ khóa khác hoặc tự ghim bản đồ.", "error");
       return;
     }
+    setMessage(
+      els.searchMessage,
+      summaryText || ("Tìm thấy " + results.length + " kết quả từ " + defaultLabel + ". Bấm vào địa chỉ để ghim lên bản đồ."),
+      "success"
+    );
+
     results.forEach((result) => {
+      const itemSource = result._source || defaultSource;
+      const sourceLabel = itemSource === "mapbox" ? "Mapbox" : (itemSource === "locationiq" ? "LocationIQ" : "OSM");
+
       const button = document.createElement("button");
       button.type = "button";
       button.className = "search-result";
       const title = document.createElement("strong");
-      title.textContent = result.name || result.display_name.split(",")[0];
+
+      const displayName = result.display_name || "";
+      const primaryName = result.name || (result.address ? (result.address.name || result.address.road || displayName.split(",")[0]) : displayName.split(",")[0]);
+      title.textContent = "[" + sourceLabel + "] " + primaryName.trim();
+
       const detail = document.createElement("span");
-      detail.textContent = result.display_name;
+      detail.textContent = displayName;
       button.append(title, detail);
+
       button.addEventListener("click", () => {
-        const houseNumber = Boolean(result.address?.house_number);
-        setDestination(Number(result.lat), Number(result.lon), result.display_name, false);
-        setTag(els.locationQuality, houseNumber ? "Có số nhà OSM" : "Vị trí gần đúng", houseNumber ? "success" : "warning");
-        setMessage(els.searchMessage, houseNumber
-          ? "Đã chọn kết quả. Có thể kéo ghim để kiểm tra."
-          : "OSM chưa xác nhận số nhà; hãy kéo ghim tới vị trí chính xác.", houseNumber ? "success" : "");
+        setDestination(Number(result.lat), Number(result.lon), displayName, true);
+        setMessage(els.searchMessage, "Đã ghim điểm đến! Có thể kéo ghim trên bản đồ để tinh chỉnh.", "success");
       });
       els.searchResults.appendChild(button);
     });
   }
 
-  els.searchForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
+  async function executeAddressSearch() {
     const address = els.addressInput.value.trim();
     if (!address) return;
-    setMessage(els.searchMessage, "Đang tìm trên OpenStreetMap…");
     els.searchResults.replaceChildren();
-    try { renderSearchResults(await searchAddress(address)); }
-    catch (error) { setMessage(els.searchMessage, `Không tìm được địa chỉ: ${error.message}`, "error"); }
+
+    const mode = els.searchProvider ? els.searchProvider.value : "combined";
+    const mapboxKey = getMapboxApiKey();
+    const locationIqKey = getLocationIqApiKey();
+    const hasMapbox = Boolean(mapboxKey && mapboxKey !== "DIEN_MAPBOX_TOKEN_VAO_DAY");
+    const hasLocationIq = Boolean(locationIqKey && locationIqKey !== "DIEN_LOCATIONIQ_TOKEN_VAO_DAY");
+
+    if (mode === "combined") {
+      setMessage(els.searchMessage, "Đang tìm kiếm đồng thời trên cả 3 API (Mapbox + LocationIQ + OSM)…");
+      const tasks = [
+        hasMapbox ? searchAddressWithMapbox(address, mapboxKey) : Promise.resolve([]),
+        hasLocationIq ? searchAddressWithLocationIq(address, locationIqKey) : Promise.resolve([]),
+        searchAddress(address)
+      ];
+      const [mbxSettled, liqSettled, osmSettled] = await Promise.allSettled(tasks);
+      const mbxList = mbxSettled.status === "fulfilled" && Array.isArray(mbxSettled.value) ? mbxSettled.value : [];
+      const liqList = liqSettled.status === "fulfilled" && Array.isArray(liqSettled.value) ? liqSettled.value : [];
+      const osmList = osmSettled.status === "fulfilled" && Array.isArray(osmSettled.value) ? osmSettled.value : [];
+
+      const merged = mergeMultiSourceResults(mbxList, liqList, osmList, 10);
+      const summary = `Gộp ${merged.length} kết quả (Mapbox: ${mbxList.length}, LocationIQ: ${liqList.length}, OSM: ${osmList.length})`;
+      renderSearchResults(merged, "combined", summary);
+      return;
+    }
+
+    if (mode === "mapbox") {
+      if (!hasMapbox) {
+        setMessage(els.searchMessage, "Chưa có MAPBOX_API_KEY trong env.js!", "error");
+        return;
+      }
+      setMessage(els.searchMessage, "Đang tìm kiếm qua Mapbox API…");
+      try {
+        const results = await searchAddressWithMapbox(address, mapboxKey);
+        renderSearchResults(results, "mapbox");
+      } catch (err) {
+        setMessage(els.searchMessage, "Lỗi Mapbox: " + err.message, "error");
+      }
+      return;
+    }
+
+    if (mode === "locationiq") {
+      if (!hasLocationIq) {
+        setMessage(els.searchMessage, "Chưa có LOCATIONIQ_API_KEY trong env.js!", "error");
+        return;
+      }
+      setMessage(els.searchMessage, "Đang tìm kiếm qua LocationIQ API…");
+      try {
+        const results = await searchAddressWithLocationIq(address, locationIqKey);
+        renderSearchResults(results, "locationiq");
+      } catch (err) {
+        setMessage(els.searchMessage, "Lỗi LocationIQ: " + err.message, "error");
+      }
+      return;
+    }
+
+    if (mode === "osm") {
+      setMessage(els.searchMessage, "Đang tìm trên OpenStreetMap (Nominatim)…");
+      try {
+        const results = await searchAddress(address);
+        renderSearchResults(results, "osm");
+      } catch (err) {
+        setMessage(els.searchMessage, "Lỗi OSM: " + err.message, "error");
+      }
+      return;
+    }
+
+    // Chế độ Tự động tuần tự: Mapbox -> LocationIQ -> OSM
+    if (hasMapbox) {
+      setMessage(els.searchMessage, "Đang tìm kiếm qua Mapbox…");
+      try {
+        const results = await searchAddressWithMapbox(address, mapboxKey);
+        if (results && results.length > 0) {
+          renderSearchResults(results, "mapbox");
+          return;
+        }
+      } catch (err) {
+        console.warn("Mapbox error, falling back to LocationIQ:", err);
+      }
+    }
+
+    if (hasLocationIq) {
+      setMessage(els.searchMessage, "Đang tìm kiếm qua LocationIQ…");
+      try {
+        const results = await searchAddressWithLocationIq(address, locationIqKey);
+        renderSearchResults(results, "locationiq");
+        return;
+      } catch (err) {
+        console.warn("LocationIQ error, falling back to OSM:", err);
+      }
+    }
+
+    setMessage(els.searchMessage, "Đang tìm trên OpenStreetMap…");
+    try {
+      renderSearchResults(await searchAddress(address), "osm");
+    } catch (error) {
+      setMessage(els.searchMessage, "Không tìm được địa chỉ: " + error.message, "error");
+    }
+  }
+
+  els.searchForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await executeAddressSearch();
   });
+
+  if (els.searchProvider) {
+    els.searchProvider.addEventListener("change", () => {
+      if (els.addressInput.value.trim()) {
+        executeAddressSearch();
+      }
+    });
+  }
 
   els.coordinateForm.addEventListener("submit", (event) => {
     event.preventDefault();
