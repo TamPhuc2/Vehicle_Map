@@ -311,88 +311,158 @@
       access_token: apiKey,
       country: "VN",
       language: "vi",
-      limit: "5",
-      proximity: ref.lon + "," + ref.lat
+      limit: "5"
     });
-    const sbUrl = "https://api.mapbox.com/search/searchbox/v1/forward?" + sbParams.toString();
-    const sbRes = await fetch(sbUrl, { cache: "no-store" });
-    if (sbRes.ok) {
-      const sbData = await sbRes.json();
-      if (Array.isArray(sbData.features) && sbData.features.length > 0) {
-        return sbData.features.map((f) => {
-          const props = f.properties || {};
-          const coords = f.geometry?.coordinates || [0, 0];
-          const name = props.name || "";
-          const fullAddr = props.full_address || props.place_formatted || name;
-          return {
-            name: name || fullAddr.split(",")[0],
-            display_name: fullAddr.includes(name) ? fullAddr : (name ? name + " — " + fullAddr : fullAddr),
-            lat: Number(coords[1]),
-            lon: Number(coords[0]),
-            address: {
-              house_number: props.Context?.address?.address_number || (props.feature_type === "address" || props.feature_type === "poi" ? "yes" : "")
-            }
-          };
-        });
-      }
+    // Không ép proximity cố định nếu người dùng tìm địa chỉ chứa dấu phẩy (tỉnh/thành cụ thể)
+    if (!query.includes(",")) {
+      sbParams.set("proximity", ref.lon + "," + ref.lat);
     }
+    try {
+      const sbUrl = "https://api.mapbox.com/search/searchbox/v1/forward?" + sbParams.toString();
+      const sbRes = await fetch(sbUrl, { cache: "no-store" });
+      if (sbRes.ok) {
+        const sbData = await sbRes.json();
+        if (Array.isArray(sbData.features) && sbData.features.length > 0) {
+          return sbData.features.map((f) => {
+            const props = f.properties || {};
+            const coords = f.geometry?.coordinates || [0, 0];
+            const name = props.name || "";
+            const fullAddr = props.full_address || props.place_formatted || name;
+            return {
+              name: name || fullAddr.split(",")[0].trim(),
+              display_name: fullAddr.includes(name) ? fullAddr : (name ? name + " — " + fullAddr : fullAddr),
+              lat: Number(coords[1]),
+              lon: Number(coords[0]),
+              address: {
+                house_number: props.Context?.address?.address_number || (props.feature_type === "address" || props.feature_type === "poi" ? "yes" : "")
+              }
+            };
+          });
+        }
+      }
+    } catch (_) {}
 
     // 2. Dự phòng sang Mapbox Geocoding API v5
-    const v5Params = new URLSearchParams({
-      access_token: apiKey,
-      country: "vn",
-      language: "vi",
-      limit: "5",
-      autocomplete: "true",
-      proximity: ref.lon + "," + ref.lat
-    });
-    const v5Url = "https://api.mapbox.com/geocoding/v5/mapbox.places/" + encodeURIComponent(query) + ".json?" + v5Params.toString();
-    const response = await fetch(v5Url, { cache: "no-store" });
-    if (!response.ok) {
-      let detail = "";
-      try {
-        const errJson = await response.json();
-        detail = errJson.message ? " (" + errJson.message + ")" : "";
-      } catch (_) {}
-      throw new Error("Mapbox HTTP " + response.status + detail);
-    }
-    const data = await response.json();
-    return (data.features || []).map((f) => ({
-      name: f.text_vi || f.text || (f.place_name ? f.place_name.split(",")[0] : ""),
-      display_name: f.place_name_vi || f.place_name || "",
-      lat: Array.isArray(f.center) ? f.center[1] : 0,
-      lon: Array.isArray(f.center) ? f.center[0] : 0,
-      address: {
-        house_number: f.address || (Array.isArray(f.place_type) && f.place_type.includes("address") ? "yes" : "")
+    try {
+      const v5Params = new URLSearchParams({
+        access_token: apiKey,
+        country: "vn",
+        language: "vi",
+        limit: "5",
+        autocomplete: "true"
+      });
+      if (!query.includes(",")) {
+        v5Params.set("proximity", ref.lon + "," + ref.lat);
       }
-    }));
+      const v5Url = "https://api.mapbox.com/geocoding/v5/mapbox.places/" + encodeURIComponent(query) + ".json?" + v5Params.toString();
+      const response = await fetch(v5Url, { cache: "no-store" });
+      if (response.ok) {
+        const data = await response.json();
+        return (data.features || []).map((f) => ({
+          name: f.text_vi || f.text || (f.place_name ? f.place_name.split(",")[0].trim() : ""),
+          display_name: f.place_name_vi || f.place_name || "",
+          lat: Array.isArray(f.center) ? f.center[1] : 0,
+          lon: Array.isArray(f.center) ? f.center[0] : 0,
+          address: {
+            house_number: f.address || (Array.isArray(f.place_type) && f.place_type.includes("address") ? "yes" : "")
+          }
+        }));
+      }
+    } catch (_) {}
+
+    return [];
   }
 
   async function searchAddressWithLocationIq(query, apiKey) {
     const ref = getReferenceCoords();
-    const params = new URLSearchParams({
+    // 1. Thử gọi Autocomplete
+    const autoParams = new URLSearchParams({
       key: apiKey,
       q: query,
       countrycodes: "vn",
       format: "json",
       limit: "5",
-      "accept-language": "vi",
-      lat: String(ref.lat),
-      lon: String(ref.lon)
+      "accept-language": "vi"
     });
-    const response = await fetch("https://us1.locationiq.com/v1/autocomplete?" + params.toString(), { cache: "no-store" });
-    if (!response.ok) throw new Error("LocationIQ HTTP " + response.status);
-    return response.json();
+    if (!query.includes(",")) {
+      autoParams.set("lat", String(ref.lat));
+      autoParams.set("lon", String(ref.lon));
+    }
+    
+    let results = [];
+    try {
+      const res = await fetch("https://us1.locationiq.com/v1/autocomplete?" + autoParams.toString(), { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) results = data;
+      }
+    } catch (_) {}
+
+    // 2. Nếu Autocomplete ít kết quả hoặc tìm địa danh tỉnh thành cụ thể, bổ sung thêm Search API v1
+    if (results.length < 3) {
+      try {
+        const searchParams = new URLSearchParams({
+          key: apiKey,
+          q: query,
+          countrycodes: "vn",
+          format: "json",
+          limit: "5",
+          "accept-language": "vi"
+        });
+        const res2 = await fetch("https://us1.locationiq.com/v1/search?" + searchParams.toString(), { cache: "no-store" });
+        if (res2.ok) {
+          const data2 = await res2.json();
+          if (Array.isArray(data2)) {
+            data2.forEach((item) => {
+              if (!results.some((r) => r.place_id === item.place_id)) {
+                results.push(item);
+              }
+            });
+          }
+        }
+      } catch (_) {}
+    }
+
+    return results.map((item) => {
+      const disp = item.display_name || "";
+      const primary = item.name || (disp ? disp.split(",")[0].trim() : "");
+      return {
+        ...item,
+        name: primary,
+        display_name: disp
+      };
+    });
   }
 
   async function searchAddress(address) {
     const wait = SEARCH_DELAY_MS - (Date.now() - state.lastSearchAt);
     if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
     state.lastSearchAt = Date.now();
-    const params = new URLSearchParams({ q: address, format: "jsonv2", addressdetails: "1", limit: "5", "accept-language": "vi" });
-    const response = await fetch(NOMINATIM_URL + "?" + params.toString(), { headers: { Accept: "application/json" }, cache: "no-store" });
-    if (!response.ok) throw new Error("Nominatim HTTP " + response.status);
-    return response.json();
+    const params = new URLSearchParams({
+      q: address,
+      format: "jsonv2",
+      addressdetails: "1",
+      limit: "5",
+      countrycodes: "vn",
+      "accept-language": "vi"
+    });
+    try {
+      const response = await fetch(NOMINATIM_URL + "?" + params.toString(), { headers: { Accept: "application/json" }, cache: "no-store" });
+      if (!response.ok) return [];
+      const data = await response.json();
+      if (!Array.isArray(data)) return [];
+      return data.map((item) => {
+        const disp = item.display_name || "";
+        const primary = item.name || (item.address ? (item.address.name || item.address.road || disp.split(",")[0]) : disp.split(",")[0]);
+        return {
+          ...item,
+          name: (primary || "").trim(),
+          display_name: disp
+        };
+      });
+    } catch (_) {
+      return [];
+    }
   }
 
   function approxDistanceMeters(lat1, lon1, lat2, lon2) {
@@ -405,28 +475,109 @@
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
-  function mergeMultiSourceResults(mapboxList, locationIqList, osmList, maxTotal = 10) {
-    const tagged = [];
-    const maxLen = Math.max(mapboxList.length, locationIqList.length, osmList.length);
-    // Đan xen kết quả (Interleave) từ cả 3 nguồn để danh sách vừa có POI/Hẻm (Mapbox) vừa có Số nhà/Trường học (LocationIQ & OSM)
-    for (let i = 0; i < maxLen; i++) {
-      if (i < mapboxList.length) tagged.push({ ...mapboxList[i], _source: "mapbox" });
-      if (i < locationIqList.length) tagged.push({ ...locationIqList[i], _source: "locationiq" });
-      if (i < osmList.length) tagged.push({ ...osmList[i], _source: "osm" });
+  function cleanVietnameseText(str) {
+    return String(str || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/đ/g, "d")
+      .replace(/[^a-z0-9\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  const GENERIC_VIET_WORDS = new Set([
+    "truong", "tieu", "hoc", "trung", "pho", "thong", "dai", "mam", "non",
+    "duong", "ngo", "hem", "ngach", "so", "nha", "khu", "ap",
+    "quan", "huyen", "thi", "xa", "thanh", "tinh", "phuong"
+  ]);
+
+  // Chấm điểm độ khớp giữa từ khóa tìm kiếm và kết quả
+  function calculateRelevanceScore(item, rawQuery) {
+    const normQuery = cleanVietnameseText(rawQuery);
+    const allTokens = normQuery.split(" ").filter((t) => t.length > 1);
+    if (allTokens.length === 0) return 100;
+
+    // Lọc loại trừ các từ chỉ loại hình/hành chính chung chung (trường, tiểu học, đường, quận...)
+    const keyTokens = allTokens.filter((t) => !GENERIC_VIET_WORDS.has(t));
+    const effectiveTokens = keyTokens.length > 0 ? keyTokens : allTokens;
+
+    const primaryName = item.name || (item.display_name ? item.display_name.split(",")[0].trim() : "");
+    const normName = cleanVietnameseText(primaryName);
+    const normFull = cleanVietnameseText(item.display_name || "");
+    const combined = normName + " " + normFull;
+
+    // Kiểm tra từng cụm con được phân tách bằng dấu phẩy (vd: "trường tiểu học hùng vương", "vĩnh long")
+    const subPhrases = rawQuery
+      .toLowerCase()
+      .split(",")
+      .map((s) => cleanVietnameseText(s))
+      .filter((s) => s.length > 2);
+
+    let phraseMatches = 0;
+    subPhrases.forEach((phrase) => {
+      if (combined.includes(phrase)) {
+        phraseMatches++;
+      }
+    });
+
+    // Đếm từ khóa cốt lõi xuất hiện trong kết quả
+    let matchedKeyTokens = 0;
+    effectiveTokens.forEach((t) => {
+      if (combined.includes(t)) matchedKeyTokens++;
+    });
+
+    const keyRatio = matchedKeyTokens / effectiveTokens.length;
+
+    // Nếu người dùng nhập có địa danh/tỉnh thành (có dấu phẩy, >= 2 vế):
+    // Phải khớp ít nhất 1 cụm hoặc tối thiểu 60% từ khóa cốt lõi, nếu không là kết quả nhận vơ khác địa phương!
+    if (subPhrases.length >= 2 && phraseMatches === 0 && keyRatio < 0.6) {
+      return 0;
     }
 
+    let score = (keyRatio * 60) + (phraseMatches * 30);
+    // Thưởng thêm nếu vế đầu (tên địa điểm) xuất hiện trực tiếp trong tên chính
+    if (subPhrases[0] && normName.includes(subPhrases[0])) {
+      score += 20;
+    }
+
+    return score;
+  }
+
+  function mergeMultiSourceResults(mapboxList, locationIqList, osmList, rawQuery, maxTotal = 10) {
+    const tagged = [];
+    (mapboxList || []).forEach((item) => tagged.push({ ...item, _source: "mapbox" }));
+    (locationIqList || []).forEach((item) => tagged.push({ ...item, _source: "locationiq" }));
+    (osmList || []).forEach((item) => tagged.push({ ...item, _source: "osm" }));
+
+    // 1. Tính điểm liên quan cho từng kết quả
+    tagged.forEach((item) => {
+      item._score = calculateRelevanceScore(item, rawQuery);
+    });
+
+    // 2. Lọc bỏ các kết quả có điểm = 0 (bị loại hoàn toàn vì lệch địa phương/không khớp tên cốt lõi)
+    let filtered = tagged.filter((item) => item._score > 0);
+
+    // Nếu lọc hết (do không có kết quả chuẩn tuyệt đối), dùng lại danh sách gốc để người dùng tự xem
+    if (filtered.length === 0) {
+      filtered = tagged;
+    }
+
+    // 3. Sắp xếp kết quả: Điểm liên quan cao nhất lên đầu
+    filtered.sort((a, b) => b._score - a._score);
+
+    // 4. Khử trùng lặp theo tọa độ (< 35m) và giới hạn trong lãnh thổ Việt Nam
     const deduplicated = [];
-    for (const item of tagged) {
+    for (const item of filtered) {
       const lat = Number(item.lat);
       const lon = Number(item.lon);
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
-      const itemTitle = String(item.name || item.display_name || "").split(",")[0].trim().toLowerCase();
+      // Khóa phạm vi lãnh thổ Việt Nam (Vĩ độ: 8.0 - 23.6, Kinh độ: 102.0 - 110.0)
+      if (lat < 8.0 || lat > 23.6 || lon < 102.0 || lon > 110.0) continue;
 
-      // Khử trùng lặp nếu 2 API trả về cùng 1 điểm cách nhau < 25m và cùng tên đầu
       const isDuplicate = deduplicated.some((existing) => {
         const dist = approxDistanceMeters(lat, lon, Number(existing.lat), Number(existing.lon));
-        const existingTitle = String(existing.name || existing.display_name || "").split(",")[0].trim().toLowerCase();
-        return dist < 25 && itemTitle === existingTitle;
+        return dist < 35;
       });
 
       if (!isDuplicate) {
@@ -441,7 +592,7 @@
     els.searchResults.replaceChildren();
     const defaultLabel = defaultSource === "mapbox" ? "Mapbox" : (defaultSource === "locationiq" ? "LocationIQ" : "OSM");
     if (!results || !results.length) {
-      setMessage(els.searchMessage, (summaryText || "[" + defaultLabel + "]") + " Không tìm thấy kết quả. Hãy thử từ khóa khác hoặc tự ghim bản đồ.", "error");
+      setMessage(els.searchMessage, (summaryText || "[" + defaultLabel + "]") + " Không tìm thấy kết quả phù hợp. Hãy thử từ khóa khác hoặc tự ghim bản đồ.", "error");
       return;
     }
     setMessage(
@@ -468,8 +619,16 @@
       button.append(title, detail);
 
       button.addEventListener("click", () => {
+        const hasHouseNumber = Boolean(result.address?.house_number);
         setDestination(Number(result.lat), Number(result.lon), displayName, true);
-        setMessage(els.searchMessage, "Đã ghim điểm đến! Có thể kéo ghim trên bản đồ để tinh chỉnh.", "success");
+        if (itemSource === "mapbox") {
+          setTag(els.locationQuality, hasHouseNumber ? "Số nhà Mapbox" : "Địa chỉ Mapbox", "success");
+        } else if (itemSource === "locationiq") {
+          setTag(els.locationQuality, hasHouseNumber ? "Số nhà LocationIQ" : "Địa chỉ LocationIQ", "success");
+        } else {
+          setTag(els.locationQuality, hasHouseNumber ? "Có số nhà OSM" : "Vị trí gần đúng", hasHouseNumber ? "success" : "warning");
+        }
+        setMessage(els.searchMessage, "Đã ghim điểm đến (" + sourceLabel + ")! Có thể kéo ghim trên bản đồ để tinh chỉnh.", "success");
       });
       els.searchResults.appendChild(button);
     });
@@ -486,92 +645,90 @@
     const hasMapbox = Boolean(mapboxKey && mapboxKey !== "DIEN_MAPBOX_TOKEN_VAO_DAY");
     const hasLocationIq = Boolean(locationIqKey && locationIqKey !== "DIEN_LOCATIONIQ_TOKEN_VAO_DAY");
 
-    if (mode === "combined") {
-      setMessage(els.searchMessage, "Đang tìm kiếm đồng thời trên cả 3 API (Mapbox + LocationIQ + OSM)…");
-      const tasks = [
-        hasMapbox ? searchAddressWithMapbox(address, mapboxKey) : Promise.resolve([]),
-        hasLocationIq ? searchAddressWithLocationIq(address, locationIqKey) : Promise.resolve([]),
-        searchAddress(address)
-      ];
-      const [mbxSettled, liqSettled, osmSettled] = await Promise.allSettled(tasks);
-      const mbxList = mbxSettled.status === "fulfilled" && Array.isArray(mbxSettled.value) ? mbxSettled.value : [];
-      const liqList = liqSettled.status === "fulfilled" && Array.isArray(liqSettled.value) ? liqSettled.value : [];
-      const osmList = osmSettled.status === "fulfilled" && Array.isArray(osmSettled.value) ? osmSettled.value : [];
+    try {
+      if (mode === "combined") {
+        setMessage(els.searchMessage, "Đang tìm kiếm đồng thời trên cả 3 API (Mapbox + LocationIQ + OSM)…");
+        const tasks = [
+          hasMapbox ? searchAddressWithMapbox(address, mapboxKey) : Promise.resolve([]),
+          hasLocationIq ? searchAddressWithLocationIq(address, locationIqKey) : Promise.resolve([]),
+          searchAddress(address)
+        ];
+        const [mbxSettled, liqSettled, osmSettled] = await Promise.allSettled(tasks);
+        const mbxList = mbxSettled.status === "fulfilled" && Array.isArray(mbxSettled.value) ? mbxSettled.value : [];
+        const liqList = liqSettled.status === "fulfilled" && Array.isArray(liqSettled.value) ? liqSettled.value : [];
+        const osmList = osmSettled.status === "fulfilled" && Array.isArray(osmSettled.value) ? osmSettled.value : [];
 
-      const merged = mergeMultiSourceResults(mbxList, liqList, osmList, 10);
-      const summary = `Gộp ${merged.length} kết quả (Mapbox: ${mbxList.length}, LocationIQ: ${liqList.length}, OSM: ${osmList.length})`;
-      renderSearchResults(merged, "combined", summary);
-      return;
-    }
-
-    if (mode === "mapbox") {
-      if (!hasMapbox) {
-        setMessage(els.searchMessage, "Chưa có MAPBOX_API_KEY trong env.js!", "error");
+        const merged = mergeMultiSourceResults(mbxList, liqList, osmList, address, 10);
+        const summary = `Gộp chuẩn ${merged.length} kết quả (Mapbox: ${mbxList.length}, LocationIQ: ${liqList.length}, OSM: ${osmList.length})`;
+        renderSearchResults(merged, "combined", summary);
         return;
       }
-      setMessage(els.searchMessage, "Đang tìm kiếm qua Mapbox API…");
-      try {
-        const results = await searchAddressWithMapbox(address, mapboxKey);
-        renderSearchResults(results, "mapbox");
-      } catch (err) {
-        setMessage(els.searchMessage, "Lỗi Mapbox: " + err.message, "error");
-      }
-      return;
-    }
 
-    if (mode === "locationiq") {
-      if (!hasLocationIq) {
-        setMessage(els.searchMessage, "Chưa có LOCATIONIQ_API_KEY trong env.js!", "error");
-        return;
-      }
-      setMessage(els.searchMessage, "Đang tìm kiếm qua LocationIQ API…");
-      try {
-        const results = await searchAddressWithLocationIq(address, locationIqKey);
-        renderSearchResults(results, "locationiq");
-      } catch (err) {
-        setMessage(els.searchMessage, "Lỗi LocationIQ: " + err.message, "error");
-      }
-      return;
-    }
-
-    if (mode === "osm") {
-      setMessage(els.searchMessage, "Đang tìm trên OpenStreetMap (Nominatim)…");
-      try {
-        const results = await searchAddress(address);
-        renderSearchResults(results, "osm");
-      } catch (err) {
-        setMessage(els.searchMessage, "Lỗi OSM: " + err.message, "error");
-      }
-      return;
-    }
-
-    // Chế độ Tự động tuần tự: Mapbox -> LocationIQ -> OSM
-    if (hasMapbox) {
-      setMessage(els.searchMessage, "Đang tìm kiếm qua Mapbox…");
-      try {
-        const results = await searchAddressWithMapbox(address, mapboxKey);
-        if (results && results.length > 0) {
-          renderSearchResults(results, "mapbox");
+      if (mode === "mapbox") {
+        if (!hasMapbox) {
+          setMessage(els.searchMessage, "Chưa có MAPBOX_API_KEY trong env.js!", "error");
           return;
         }
-      } catch (err) {
-        console.warn("Mapbox error, falling back to LocationIQ:", err);
-      }
-    }
-
-    if (hasLocationIq) {
-      setMessage(els.searchMessage, "Đang tìm kiếm qua LocationIQ…");
-      try {
-        const results = await searchAddressWithLocationIq(address, locationIqKey);
-        renderSearchResults(results, "locationiq");
+        setMessage(els.searchMessage, "Đang tìm kiếm qua Mapbox API…");
+        const results = await searchAddressWithMapbox(address, mapboxKey);
+        const scored = (results || []).map((r) => ({ ...r, _score: calculateRelevanceScore(r, address) }));
+        scored.sort((a, b) => b._score - a._score);
+        renderSearchResults(scored, "mapbox");
         return;
-      } catch (err) {
-        console.warn("LocationIQ error, falling back to OSM:", err);
       }
-    }
 
-    setMessage(els.searchMessage, "Đang tìm trên OpenStreetMap…");
-    try {
+      if (mode === "locationiq") {
+        if (!hasLocationIq) {
+          setMessage(els.searchMessage, "Chưa có LOCATIONIQ_API_KEY trong env.js!", "error");
+          return;
+        }
+        setMessage(els.searchMessage, "Đang tìm kiếm qua LocationIQ API…");
+        const results = await searchAddressWithLocationIq(address, locationIqKey);
+        const scored = (results || []).map((r) => ({ ...r, _score: calculateRelevanceScore(r, address) }));
+        scored.sort((a, b) => b._score - a._score);
+        renderSearchResults(scored, "locationiq");
+        return;
+      }
+
+      if (mode === "osm") {
+        setMessage(els.searchMessage, "Đang tìm trên OpenStreetMap (Nominatim)…");
+        const results = await searchAddress(address);
+        renderSearchResults(results, "osm");
+        return;
+      }
+
+      // Chế độ Tự động tuần tự: Mapbox -> LocationIQ -> OSM
+      if (hasMapbox) {
+        setMessage(els.searchMessage, "Đang tìm kiếm qua Mapbox…");
+        try {
+          const results = await searchAddressWithMapbox(address, mapboxKey);
+          if (results && results.length > 0) {
+            const scored = results.map((r) => ({ ...r, _score: calculateRelevanceScore(r, address) }));
+            scored.sort((a, b) => b._score - a._score);
+            if (scored[0]._score >= 30) {
+              renderSearchResults(scored, "mapbox");
+              return;
+            }
+          }
+        } catch (err) {
+          console.warn("Mapbox error, falling back to LocationIQ:", err);
+        }
+      }
+
+      if (hasLocationIq) {
+        setMessage(els.searchMessage, "Đang tìm kiếm qua LocationIQ…");
+        try {
+          const results = await searchAddressWithLocationIq(address, locationIqKey);
+          if (results && results.length > 0) {
+            renderSearchResults(results, "locationiq");
+            return;
+          }
+        } catch (err) {
+          console.warn("LocationIQ error, falling back to OSM:", err);
+        }
+      }
+
+      setMessage(els.searchMessage, "Đang tìm trên OpenStreetMap…");
       renderSearchResults(await searchAddress(address), "osm");
     } catch (error) {
       setMessage(els.searchMessage, "Không tìm được địa chỉ: " + error.message, "error");
